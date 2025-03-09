@@ -5,11 +5,9 @@
 	// Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
 	"image": "ghcr.io/yunho7687/react-native-devenv:latest",
 	"forwardPorts": [
-		3004,
-		8002,
-		5437
+		19001
 	],
-	"postCreateCommand": "figlet 'ANSAT Pro'"
+	"postCreateCommand": "figlet 'ANSAT Pro' && ./rundocker.sh"
 	// Use 'postCreateCommand' to run commands after the container is created.
 	// Note: Useful for when they open it and want everything to just start
 	// "postCreateCommand": "./.devcontainer/setup.sh",
