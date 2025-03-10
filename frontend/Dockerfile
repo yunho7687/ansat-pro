@@ -16,4 +16,4 @@ COPY . .
 EXPOSE 19000
 
 # Start the Expo app
-CMD ["npx", "expo", "start", "--port", "19001"]
+# CMD ["npx", "expo", "start", "--port", "19001"]
