@@ -1,7 +1,6 @@
 import type { TextRef, ViewRef } from '@rn-primitives/types';
 import * as React from 'react';
-import { Text, type TextProps, View, type ViewProps } from 'react-native';
-
+import { Text, TextProps, View, ViewProps } from 'react-native';
 import { TextClassContext } from '~/components/ui/text';
 import { cn } from '~/lib/utils';
 
@@ -9,7 +8,7 @@ const Card = React.forwardRef<ViewRef, ViewProps>(({ className, ...props }, ref)
   <View
     ref={ref}
     className={cn(
-      'border-border bg-card shadow-foreground/10 rounded-lg border shadow-sm',
+      'rounded-lg border border-border bg-card shadow-sm shadow-foreground/10',
       className
     )}
     {...props}
@@ -22,27 +21,29 @@ const CardHeader = React.forwardRef<ViewRef, ViewProps>(({ className, ...props }
 ));
 CardHeader.displayName = 'CardHeader';
 
-const CardTitle = React.forwardRef<TextRef, TextProps>(({ className, ...props }, ref) => (
-  <Text
-    role="heading"
-    aria-level={3}
-    ref={ref}
-    className={cn(
-      'text-card-foreground text-2xl font-semibold leading-none tracking-tight',
-      className
-    )}
-    {...props}
-  />
-));
+const CardTitle = React.forwardRef<TextRef, React.ComponentPropsWithoutRef<typeof Text>>(
+  ({ className, ...props }, ref) => (
+    <Text
+      role='heading'
+      aria-level={3}
+      ref={ref}
+      className={cn(
+        'text-2xl text-card-foreground font-semibold leading-none tracking-tight',
+        className
+      )}
+      {...props}
+    />
+  )
+);
 CardTitle.displayName = 'CardTitle';
 
 const CardDescription = React.forwardRef<TextRef, TextProps>(({ className, ...props }, ref) => (
-  <Text ref={ref} className={cn('text-muted-foreground text-sm', className)} {...props} />
+  <Text ref={ref} className={cn('text-sm text-muted-foreground', className)} {...props} />
 ));
 CardDescription.displayName = 'CardDescription';
 
 const CardContent = React.forwardRef<ViewRef, ViewProps>(({ className, ...props }, ref) => (
-  <TextClassContext.Provider value="text-card-foreground">
+  <TextClassContext.Provider value='text-card-foreground'>
     <View ref={ref} className={cn('p-6 pt-0', className)} {...props} />
   </TextClassContext.Provider>
 ));
