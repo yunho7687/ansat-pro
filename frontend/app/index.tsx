@@ -59,7 +59,7 @@ export default function Screen() {
                 />
               </TooltipTrigger>
               <TooltipContent className="py-2 px-4 shadow">
-                <Text className="native:text-lg">Freelance</Text>
+                <Text className="native:text-lg">Freelance2</Text>
               </TooltipContent>
             </Tooltip>
           </View>
