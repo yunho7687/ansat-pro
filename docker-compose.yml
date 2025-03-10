@@ -3,10 +3,9 @@ services:
   frontend:
     build:
       context: .
-      dockerfile: .docker/frontend/Dockerfile
+      dockerfile: ./docker/frontend/Dockerfile
     ports:
       - "19000:19000"
-      - "19001:19001"
     volumes:
       - ./frontend:/app
     tty: true
