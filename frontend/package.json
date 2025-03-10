@@ -62,8 +62,8 @@
   },
   "eslintConfig": {
     "extends": [
-      "universe/native"
-    
+      "universe/native",
+      "prettier"
     ],
     "rules": {},
     "root": true
