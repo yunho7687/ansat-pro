@@ -153,8 +153,10 @@ npm-debug.*
 *.orig.*
 web-build/
 
-
-
+# vim swap files
+*.swp
+*.swo
+*.swn
 
 ios
 android
