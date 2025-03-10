@@ -57,13 +57,15 @@
     "@babel/core": "^7.26.0",
     "@types/react": "~18.3.12",
     "eslint": "^8.57.1",
-    "eslint-config-prettier": "^10.1.1",
-    "eslint-plugin-prettier": "^5.2.3",
     "prettier": "3.5.3",
     "typescript": "^5.3.3"
   },
   "eslintConfig": {
-    "extends": "universe/native",
+    "extends": [
+      "universe/native"
+    
+    ],
+    "rules": {},
     "root": true
   },
   "private": true
