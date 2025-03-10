@@ -1,0 +1,13 @@
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: ./docker/frontend/Dockerfile
+    ports:
+      - "19000:19000"
+    volumes:
+      - ./frontend:/app
+    tty: true
+    stdin_open: true
+    command: npm start
