@@ -3,7 +3,7 @@ services:
   frontend:
     build:
       context: .
-      dockerfile: ./frontend/Dockerfile
+      dockerfile: .docker/frontend/Dockerfile
     ports:
       - "19000:19000"
       - "19001:19001"
