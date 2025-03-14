@@ -8,7 +8,9 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  Platform,
 } from "react-native";
+import { router } from "expo-router";
 import { account } from "~/appwriteConfig";
 import { cn } from "~/lib/utils";
 
@@ -32,18 +34,40 @@ export function LoginForm({ className, ...props }: ViewProps) {
     }
     try {
       setIsLoading(true);
-      // Delete any existing session before creating a new one
+
+      // Delete any existing session
       try {
         await account.deleteSession("current");
-      } catch {
+      } catch (error) {
         // Ignore error if no session exists
       }
 
+      // Create new session
       await account.createEmailPasswordSession(email, password);
+
+      // Verify the session was created
+      const session = await account.getSession("current");
+      if (!session) {
+        throw new Error("Failed to create session");
+      }
+
       setEmail("");
       setPassword("");
+
+      // Add a small delay for iOS to ensure session is properly set
+      if (Platform.OS === "ios") {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+
+      // Navigate to profile page after successful login
+      router.replace("/profile");
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to login");
+      console.error("Login error:", error);
+      Alert.alert(
+        "Error",
+        error.message ||
+          "Failed to login. Please check your credentials and try again.",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -135,7 +159,7 @@ export function LoginForm({ className, ...props }: ViewProps) {
             <Text className="text-sm text-foreground">
               Don't have an account?{" "}
             </Text>
-            <TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push("/signup")}>
               <Text className="text-sm text-primary underline">Sign up</Text>
             </TouchableOpacity>
           </View>

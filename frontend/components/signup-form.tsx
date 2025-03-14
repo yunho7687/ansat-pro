@@ -12,6 +12,7 @@ import {
 import { AlertCircle, CheckCircle2, Info } from "lucide-react-native";
 import { account } from "~/appwriteConfig";
 import { ID } from "react-native-appwrite";
+import { router } from "expo-router";
 
 export function SignupForm() {
   const [formData, setFormData] = useState({
@@ -123,6 +124,22 @@ export function SignupForm() {
         confirmPassword: "",
       });
       setPasswordStrength(0);
+
+      // Delete any existing session before creating a new one
+      try {
+        await account.deleteSession("current");
+      } catch (error) {
+        // Ignore error if no session exists
+      }
+
+      // Create a session for the new user
+      await account.createEmailPasswordSession(
+        formData.email,
+        formData.password,
+      );
+
+      // Navigate to profile page
+      router.replace("/profile");
     } catch (error: any) {
       Alert.alert(
         "Error",
@@ -337,7 +354,7 @@ export function SignupForm() {
             <Text className="text-sm text-foreground">
               Already have an account?{" "}
             </Text>
-            <TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push("/login")}>
               <Text className="text-sm text-primary underline">Sign in</Text>
             </TouchableOpacity>
           </View>
