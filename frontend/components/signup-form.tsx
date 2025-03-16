@@ -10,8 +10,8 @@ import {
   Alert,
 } from "react-native";
 import { AlertCircle, CheckCircle2, Info } from "lucide-react-native";
-import { account } from "~/appwriteConfig";
-import { ID } from "react-native-appwrite";
+import { account, functions, LABEL_FUNCTION_ID } from "~/appwriteConfig";
+import { ExecutionMethod, ID } from "react-native-appwrite";
 import { router } from "expo-router";
 
 export function SignupForm() {
@@ -20,6 +20,7 @@ export function SignupForm() {
     email: "",
     password: "",
     confirmPassword: "",
+    role: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [passwordStrength, setPasswordStrength] = useState(0);
@@ -52,6 +53,11 @@ export function SignupForm() {
   ) => {
     if (!confirmPassword) return "Please confirm your password";
     if (password !== confirmPassword) return "Passwords do not match";
+    return "";
+  };
+
+  const validateRole = (role: string) => {
+    if (!role) return "Role selection is required";
     return "";
   };
 
@@ -115,6 +121,7 @@ export function SignupForm() {
         formData.password,
         formData.username,
       );
+
       Alert.alert("Success", "Registration successful!");
       // Clear form
       setFormData({
@@ -122,6 +129,7 @@ export function SignupForm() {
         email: "",
         password: "",
         confirmPassword: "",
+        role: "",
       });
       setPasswordStrength(0);
 
@@ -136,6 +144,22 @@ export function SignupForm() {
       await account.createEmailPasswordSession(
         formData.email,
         formData.password,
+      );
+
+      const user = await account.get();
+
+      // Select the role for the new user
+      const result = await functions.createExecution(
+        LABEL_FUNCTION_ID,
+        JSON.stringify({
+          action: "createLabel",
+          userId: user.$id,
+          label: formData.role,
+        }),
+        false,
+        undefined,
+        ExecutionMethod.POST,
+        { "Content-Type": "application/json" },
       );
 
       // Navigate to profile page
@@ -167,6 +191,9 @@ export function SignupForm() {
       formData.confirmPassword,
     );
     if (confirmPasswordError) newErrors.confirmPassword = confirmPasswordError;
+
+    const roleError = validateRole(formData.role);
+    if (roleError) newErrors.role = roleError;
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -336,6 +363,54 @@ export function SignupForm() {
                 <Text className="text-sm text-destructive">
                   {errors.confirmPassword}
                 </Text>
+              </View>
+            )}
+          </View>
+
+          <View className="gap-2">
+            <Text className="text-sm font-medium text-foreground">
+              Select Role
+              <Text className="text-destructive">*</Text>
+            </Text>
+            <View className="flex-row items-center gap-2 flex-wrap">
+              <TouchableOpacity
+                className={`bg-background border border-input rounded-md p-3 text-sm ${formData.role === "student" ? "bg-primary" : ""}`}
+                onPress={() => handleChange("role", "student")}
+                disabled={isSubmitting}
+              >
+                <Text
+                  className={`${formData.role === "student" ? "text-primary-foreground" : "text-foreground"}`}
+                >
+                  Student
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                className={`bg-background border border-input rounded-md p-3 text-sm ${formData.role === "preceptor" ? "bg-primary" : ""}`}
+                onPress={() => handleChange("role", "preceptor")}
+                disabled={isSubmitting}
+              >
+                <Text
+                  className={`${formData.role === "preceptor" ? "text-primary-foreground" : "text-foreground"}`}
+                >
+                  Preceptor
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                className={`bg-background border border-input rounded-md p-3 text-sm ${formData.role === "facilitator" ? "bg-primary" : ""}`}
+                onPress={() => handleChange("role", "facilitator")}
+                disabled={isSubmitting}
+              >
+                <Text
+                  className={`${formData.role === "facilitator" ? "text-primary-foreground" : "text-foreground"}`}
+                >
+                  Clinical Facilitator
+                </Text>
+              </TouchableOpacity>
+            </View>
+            {errors.role && (
+              <View className="flex-row items-center gap-1 mt-1">
+                <AlertCircle size={16} className="text-destructive" />
+                <Text className="text-sm text-destructive">{errors.role}</Text>
               </View>
             )}
           </View>

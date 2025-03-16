@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Platform,
   SafeAreaView,
+  TextInput,
 } from "react-native";
 import {
   Mail,
@@ -24,28 +25,52 @@ import { Card } from "~/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
 import { Badge } from "~/components/ui/badge";
 import { Separator } from "~/components/ui/separator";
-import { account } from "~/appwriteConfig";
+import {
+  account,
+  functions,
+  LABEL_FUNCTION_ID,
+  realtimeClient,
+} from "~/appwriteConfig";
+import { ExecutionMethod } from "react-native-appwrite";
 
 const GITHUB_AVATAR_URI =
   "https://i.pinimg.com/originals/ef/a2/8d/efa28d18a04e7fa40ed49eeb0ab660db.jpg";
-// Mock data for shift preceptors
-const shiftPreceptors = [
-  { day: "Monday", name: "Dr. Robert Chen", specialty: "Emergency Medicine" },
-  { day: "Tuesday", name: "Dr. Sarah Johnson", specialty: "Internal Medicine" },
-  { day: "Wednesday", name: "Dr. Michael Williams", specialty: "Surgery" },
-  { day: "Thursday", name: "Dr. Emily Davis", specialty: "Pediatrics" },
-  { day: "Friday", name: "Dr. James Wilson", specialty: "Cardiology" },
-  { day: "Saturday", name: "Dr. Lisa Thompson", specialty: "Neurology" },
-  { day: "Sunday", name: "Dr. David Martinez", specialty: "Orthopedics" },
-];
+
+interface PreceptorInfo {
+  name: string;
+  email: string;
+  specialty?: string;
+  day?: string;
+  $id?: string;
+}
+
+interface PreceptorResponse {
+  success: boolean;
+  message?: string;
+  data: {
+    users: Array<{
+      name?: string;
+      email: string;
+      prefs?: {
+        specialty?: string;
+        day?: string;
+      };
+    }>;
+  };
+  error?: string;
+}
 
 export function ProfilePage() {
   const [currentDay, setCurrentDay] = useState("");
-  const [currentPreceptor, setCurrentPreceptor] = useState<
-    (typeof shiftPreceptors)[0] | null
-  >(null);
+  const [currentPreceptor, setCurrentPreceptor] =
+    useState<PreceptorInfo | null>(null);
   const [activeTab, setActiveTab] = useState("today");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [preceptors, setPreceptors] = useState<PreceptorInfo[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [userData, setUserData] = useState<{
+    id: string;
     name: string;
     email: string;
     title: string;
@@ -55,6 +80,7 @@ export function ProfilePage() {
     joinDate: string;
   } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingPreceptor, setLoadingPreceptor] = useState(true);
 
   useEffect(() => {
     let mounted = true;
@@ -68,7 +94,10 @@ export function ProfilePage() {
         while (retryCount < 3) {
           try {
             session = await account.getSession("current");
-            if (session) break;
+            if (session) {
+              console.log("Got session:", session.$id);
+              break;
+            }
           } catch (error) {
             console.log(`Session attempt ${retryCount + 1} failed:`, error);
             await new Promise((resolve) => setTimeout(resolve, 500));
@@ -82,7 +111,24 @@ export function ProfilePage() {
 
         // Then fetch user data
         const user = await account.get();
+        console.log("Fetched user data:", { id: user.$id, email: user.email });
+
         if (!user || !mounted) return;
+
+        // Get user's labels (roles)
+        const labels = user.labels || [];
+        const role = labels[0] || "User"; // Default to "User" if no role is set
+
+        // Format the role for display
+        const formattedRole = role.charAt(0).toUpperCase() + role.slice(1);
+        const roleTitle =
+          role === "student"
+            ? "Student Nurse"
+            : role === "preceptor"
+              ? "Preceptor"
+              : role === "facilitator"
+                ? "Clinical Facilitator"
+                : formattedRole;
 
         // For now, we'll use the email name as the display name
         const name = user.email.split("@")[0].replace(/[.-]/g, " ");
@@ -92,9 +138,10 @@ export function ProfilePage() {
           .join(" ");
 
         setUserData({
+          id: user.$id,
           name: capitalizedName,
           email: user.email,
-          title: "Student Nurse",
+          title: roleTitle,
           phone: "Not set",
           location: "Not set",
           department: "UWA",
@@ -122,6 +169,116 @@ export function ProfilePage() {
   }, []);
 
   useEffect(() => {
+    const searchPreceptors = async () => {
+      // Trim the search term and check minimum length
+      const trimmedSearch = searchTerm.trim();
+      if (!trimmedSearch || trimmedSearch.length < 2) {
+        setPreceptors([]);
+        setSearchError(
+          trimmedSearch.length === 1
+            ? "Please enter at least 2 characters"
+            : null,
+        );
+        return;
+      }
+
+      setSearching(true);
+      setSearchError(null);
+      try {
+        console.log("Searching for preceptors with term:", trimmedSearch);
+        const response = await functions.createExecution(
+          LABEL_FUNCTION_ID,
+          JSON.stringify({
+            action: "searchPreceptors",
+            search: trimmedSearch,
+          }),
+          false,
+          undefined,
+          ExecutionMethod.POST,
+          { "Content-Type": "application/json" },
+        );
+
+        // Handle the response
+        let responseData: PreceptorResponse;
+        try {
+          responseData = JSON.parse(response.responseBody);
+          console.log("Parsed response data:", responseData);
+        } catch (parseError) {
+          console.error("Failed to parse response:", parseError);
+          throw new Error(
+            "Server returned invalid data. Please try again later.",
+          );
+        }
+
+        // Check if we have a valid response with users
+        if (!responseData.success) {
+          throw new Error(
+            responseData.error ||
+              responseData.message ||
+              "Failed to fetch preceptors",
+          );
+        }
+
+        if (
+          !responseData.data?.users ||
+          !Array.isArray(responseData.data.users)
+        ) {
+          setPreceptors([]);
+          return; // Not an error case, just no results
+        }
+
+        const preceptorData = responseData.data.users.map(
+          (user: {
+            name?: string;
+            email: string;
+            prefs?: {
+              specialty?: string;
+              day?: string;
+            };
+            $id?: string;
+          }) => ({
+            name: user.name || user.email.split("@")[0].replace(/[.-]/g, " "),
+            email: user.email,
+            $id: user.$id,
+            specialty: user.prefs?.specialty || "Not specified",
+            day: user.prefs?.day || "Not assigned",
+          }),
+        );
+
+        setPreceptors(preceptorData);
+        setSearchError(null);
+      } catch (error) {
+        console.error("Search error:", error);
+        let errorMessage =
+          "An error occurred while searching. Please try again.";
+
+        if (error instanceof Error) {
+          // Network or parsing errors
+          if (
+            error.message.includes("Network") ||
+            error.message.includes("connection")
+          ) {
+            errorMessage = "Network error. Please check your connection.";
+          } else if (error.message.includes("invalid")) {
+            errorMessage = "Invalid response from server. Please try again.";
+          } else {
+            errorMessage = error.message;
+          }
+        }
+
+        setSearchError(errorMessage);
+        setPreceptors([]);
+      } finally {
+        setSearching(false);
+      }
+    };
+
+    // Increase debounce time to 800ms to reduce server load
+    const timeoutId = setTimeout(searchPreceptors, 800);
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm]);
+
+  useEffect(() => {
     const days = [
       "Sunday",
       "Monday",
@@ -134,9 +291,129 @@ export function ProfilePage() {
     const today = days[new Date().getDay()];
     setCurrentDay(today);
 
-    const preceptor = shiftPreceptors.find((p) => p.day === today) || null;
-    setCurrentPreceptor(preceptor);
+    const fetchCurrentPreceptor = async () => {
+      setLoadingPreceptor(true);
+      try {
+        const response = await functions.createExecution(
+          LABEL_FUNCTION_ID,
+          JSON.stringify({
+            action: "getCurrentPreceptor",
+            role: "preceptor",
+            day: today,
+          }),
+          false,
+          undefined,
+          ExecutionMethod.POST,
+          { "Content-Type": "application/json" },
+        );
+
+        const responseData = JSON.parse(
+          response.responseBody,
+        ) as PreceptorResponse;
+        if (
+          responseData.success &&
+          responseData.data.users &&
+          responseData.data.users.length > 0
+        ) {
+          const preceptor = responseData.data.users[0];
+          setCurrentPreceptor({
+            name:
+              preceptor.name ||
+              preceptor.email.split("@")[0].replace(/[.-]/g, " "),
+            email: preceptor.email,
+            specialty: preceptor.prefs?.specialty || "Not specified",
+            day: preceptor.prefs?.day || today,
+          });
+        } else {
+          setCurrentPreceptor(null);
+        }
+      } catch (error) {
+        console.error("Failed to fetch current preceptor:", error);
+        setCurrentPreceptor(null);
+      } finally {
+        setLoadingPreceptor(false);
+      }
+    };
+
+    fetchCurrentPreceptor();
   }, []);
+
+  const handlePreceptorRequest = async (preceptor: PreceptorInfo) => {
+    try {
+      const response = await functions.createExecution(
+        LABEL_FUNCTION_ID,
+        JSON.stringify({
+          action: "requestPreceptor",
+          studentId: userData?.id,
+          studentName: userData?.name,
+          studentEmail: userData?.email,
+          preceptorId: preceptor.$id,
+          preceptorName: preceptor.name,
+          preceptorEmail: preceptor.email,
+          isPaired: false,
+          day: currentDay,
+        }),
+        false,
+        undefined,
+        ExecutionMethod.POST,
+        { "Content-Type": "application/json" },
+      );
+
+      const result = JSON.parse(response.responseBody);
+      if (result.success) {
+        console.log("Request sent to " + preceptor.name);
+        // Clear the search field after successful request
+        setSearchTerm("");
+        // Clear the search results
+        setPreceptors([]);
+      } else {
+        throw new Error(result.error || "Failed to send request");
+      }
+    } catch (error) {
+      console.error("Failed to send preceptor request:", error);
+    }
+  };
+
+  useEffect(() => {
+    // Only set up subscription if we have userData
+    if (!userData?.id) return;
+
+    // Define the payload type for type safety
+    interface DocumentPayload {
+      studentId: string;
+      isPaired: boolean;
+      preceptorName: string;
+      preceptorEmail: string;
+      specialty: string;
+      day: string;
+    }
+
+    const unsubscribe = realtimeClient.subscribe("documents", (response) => {
+      // Type guard to ensure payload matches our expected structure
+      const payload = response.payload as DocumentPayload;
+
+      if (
+        response.events.includes(
+          "databases.*.collections.*.documents.*.update",
+        ) &&
+        payload.studentId === userData.id &&
+        payload.isPaired === true
+      ) {
+        console.log("New document updated!!:", response);
+        setCurrentPreceptor({
+          name: payload.preceptorName,
+          email: payload.preceptorEmail,
+          specialty: payload.specialty || "Not specified",
+          day: payload.day || currentDay,
+        });
+      }
+    });
+
+    // Cleanup subscription
+    return () => {
+      unsubscribe();
+    };
+  }, [userData]); // Add userData as dependency
 
   if (loading) {
     return (
@@ -286,11 +563,80 @@ export function ProfilePage() {
 
                     <Separator className="my-4" />
 
+                    <View className="mb-4">
+                      <Text className="font-medium mb-2">
+                        Search Preceptors
+                      </Text>
+                      <TextInput
+                        className="bg-background border border-input rounded-md p-3 text-sm text-foreground"
+                        placeholder="Search by name or email..."
+                        value={searchTerm}
+                        onChangeText={setSearchTerm}
+                      />
+                    </View>
+
                     <Text className="font-medium mb-4">
-                      Today's Shift Preceptor
+                      {searchTerm ? "Search Results" : "Today's Preceptor"}
                     </Text>
 
-                    {currentPreceptor ? (
+                    {searchTerm ? (
+                      <ScrollView style={{ maxHeight: 300 }}>
+                        {searching ? (
+                          <Text className="text-muted-foreground">
+                            Searching...
+                          </Text>
+                        ) : searchError ? (
+                          <Text className="text-destructive">
+                            {searchError}
+                          </Text>
+                        ) : preceptors.length > 0 ? (
+                          preceptors.map((preceptor, index) => (
+                            <View
+                              key={index}
+                              className="flex-row items-center gap-4 bg-card p-4 rounded-lg border mb-2"
+                            >
+                              <Avatar
+                                alt={preceptor.name}
+                                className="h-12 w-12"
+                              />
+                              <View className="flex-1">
+                                <Text className="font-medium">
+                                  {preceptor.name}
+                                </Text>
+                                <Text className="text-sm text-muted-foreground">
+                                  {preceptor.email}
+                                </Text>
+                                <View className="flex-row items-center gap-2 mt-1">
+                                  <Badge variant="outline">
+                                    <Text>{preceptor.day}</Text>
+                                  </Badge>
+                                  <Text className="text-xs text-muted-foreground">
+                                    {preceptor.specialty}
+                                  </Text>
+                                </View>
+                                <Button
+                                  variant="outline"
+                                  className="mt-2"
+                                  onPress={() =>
+                                    handlePreceptorRequest(preceptor)
+                                  }
+                                >
+                                  <Text>Request as Preceptor</Text>
+                                </Button>
+                              </View>
+                            </View>
+                          ))
+                        ) : (
+                          <Text className="text-muted-foreground">
+                            No preceptors found matching your search.
+                          </Text>
+                        )}
+                      </ScrollView>
+                    ) : loadingPreceptor ? (
+                      <Text className="text-muted-foreground">
+                        Loading today's preceptor...
+                      </Text>
+                    ) : currentPreceptor ? (
                       <View className="flex-row items-center gap-4 bg-card p-4 rounded-lg border">
                         <Avatar
                           alt={currentPreceptor.name}
@@ -301,13 +647,18 @@ export function ProfilePage() {
                             {currentPreceptor.name}
                           </Text>
                           <Text className="text-sm text-muted-foreground">
-                            {currentPreceptor.specialty}
+                            {currentPreceptor.email}
                           </Text>
+                          <View className="flex-row items-center gap-2 mt-1">
+                            <Text className="text-xs text-muted-foreground">
+                              {currentPreceptor.specialty}
+                            </Text>
+                          </View>
                         </View>
                       </View>
                     ) : (
                       <Text className="text-muted-foreground">
-                        Loading preceptor information...
+                        No preceptor assigned for today.
                       </Text>
                     )}
                   </View>
@@ -347,18 +698,24 @@ export function ProfilePage() {
                         Specialty
                       </Text>
                     </View>
-                    {shiftPreceptors.map((preceptor, index) => (
-                      <View
-                        key={index}
-                        className={`flex-row p-3 border-t ${currentDay === preceptor.day ? "bg-muted/50" : ""}`}
-                      >
-                        <Text className="flex-1 text-sm">{preceptor.day}</Text>
-                        <Text className="flex-2 text-sm">{preceptor.name}</Text>
-                        <Text className="flex-2 text-sm">
-                          {preceptor.specialty}
-                        </Text>
-                      </View>
-                    ))}
+                    {preceptors.map(
+                      (preceptor: PreceptorInfo, index: number) => (
+                        <View
+                          key={index}
+                          className={`flex-row p-3 border-t ${currentDay === preceptor.day ? "bg-muted/50" : ""}`}
+                        >
+                          <Text className="flex-1 text-sm">
+                            {preceptor.day}
+                          </Text>
+                          <Text className="flex-2 text-sm">
+                            {preceptor.name}
+                          </Text>
+                          <Text className="flex-2 text-sm">
+                            {preceptor.specialty}
+                          </Text>
+                        </View>
+                      ),
+                    )}
                   </View>
                 </View>
               )}
